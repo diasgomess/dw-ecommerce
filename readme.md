@@ -1,53 +1,130 @@
-# Pipeline de Dados para E-commerce (Data Lakehouse)
+# DW E-commerce — Data Lakehouse Local
 
-Este projeto é uma simulação de um ambiente real de Engenharia de Dados, focado em extrair, transformar e modelar dados de um e-commerce para consumo por ferramentas de Business Intelligence.
+Simulação de um ambiente real de engenharia de dados para um e-commerce brasileiro. O projeto constrói um **Data Warehouse local** do zero usando Arquitetura Medallion (Bronze → Silver → Gold), orquestrado com Apache Airflow via Astro CLI e armazenado em DuckDB — pronto para consumo por ferramentas de BI.
 
-O objetivo principal foi construir uma infraestrutura de dados moderna, orquestrada e escalável, utilizando o conceito de Data Lakehouse e a Arquitetura Medalhão (Medallion Architecture).
+---
 
-## Arquitetura do Projeto
+## Arquitetura
 
-O fluxo de dados foi desenhado em três camadas lógicas, garantindo a rastreabilidade e a qualidade da informação do início ao fim do processo:
+```
+[Fake Store API]
+       │
+       ▼
+  ┌─────────┐      ┌──────────┐      ┌──────────┐
+  │  BRONZE │ ───▶ │  SILVER  │ ───▶ │   GOLD   │
+  │  (JSON) │      │ (Parquet)│      │ (DuckDB) │
+  └─────────┘      └──────────┘      └──────────┘
+       │                  │                 │
+  Dado bruto        Limpo e tipado    Modelado e
+  sem alteração     formato colunar   pronto pra BI
+```
 
-*   **Camada Bronze (Ingestão Bruta):**
-    Os dados são extraídos de uma API externa (Fake Store API) simulando o sistema transacional do e-commerce. Nesta camada, os dados são salvos localmente em seu formato original, garantindo o histórico exato do que foi recebido, sem nenhuma alteração.
+| Camada | Responsabilidade |
+|---|---|
+| **Bronze** | Ingestão da Fake Store API — salva JSON original sem transformação |
+| **Silver** | Limpeza, tipagem e persistência em Parquet com Pandas |
+| **Gold** | Joins entre entidades (clientes, produtos, pedidos) + regras de negócio, ingerido no DuckDB |
 
-*   **Camada Silver (Limpeza e Padronização):**
-    Os dados brutos são lidos, limpos e tipados corretamente utilizando Python. Valores nulos são tratados e os arquivos resultantes são salvos no formato colunar Parquet, o que garante alta compressão e performance para leituras futuras.
+---
 
-*   **Camada Gold (Modelagem Analítica):**
-    Os dados limpos são cruzados (joins entre clientes, produtos e pedidos) e as regras de negócio são aplicadas. O resultado é ingerido em um banco de dados analítico baseado em arquivos (DuckDB), criando um Data Warehouse local pronto para ser consumido por relatórios e dashboards.
+## Stack
 
-## Tecnologias Utilizadas
+| Categoria | Tecnologia |
+|---|---|
+| Linguagem | Python |
+| Orquestração | Apache Airflow (via Astro CLI / Astronomer) |
+| Containerização | Docker |
+| Processamento | Pandas |
+| Formato intermediário | Parquet |
+| Banco analítico | DuckDB |
+| Fonte de dados | [Fake Store API](https://fakestoreapi.com/) |
 
-A stack foi escolhida com base em ferramentas amplamente utilizadas no mercado atual de dados:
+---
 
-*   **Linguagem:** Python
-*   **Orquestração:** Apache Airflow
-*   **Infraestrutura e Deploy:** Docker e Astro CLI (Astronomer)
-*   **Processamento e Armazenamento Temporário:** Pandas e formato Parquet
-*   **Banco de Dados Analítico:** DuckDB
+## Estrutura do Projeto
 
-## Estrutura do Repositório
+```
+dw-ecommerce/
+│
+├── dags/
+│   └── pipeline_ecommerce.py      # DAG principal — define o fluxo e ordem das tasks
+│
+├── include/
+│   └── scripts/
+│       ├── bronze_ingestao.py     # Extração da Fake Store API → JSON
+│       ├── silver_tratamento.py   # Limpeza e tipagem → Parquet
+│       └── gold_modelagem.py      # Joins e regras de negócio → DuckDB
+│
+├── Dockerfile                     # Imagem customizada do Airflow
+├── packages.txt                   # Dependências de sistema
+├── requirements.txt               # Dependências Python
+└── .dockerignore
+```
 
-*   `dags/`: Contém o script Python (`pipeline_ecommerce.py`) que define o fluxo e a ordem de execução das tarefas no Airflow.
-*   `include/scripts/`: Abriga os scripts Python individuais responsáveis pela lógica de cada etapa (extração na Bronze, tratamento na Silver e modelagem na Gold).
-*   `include/data/`: Diretório ignorado no versionamento, utilizado localmente pelo container do Airflow para armazenar os arquivos Parquet e o banco DuckDB.
-*   `Dockerfile` e `requirements.txt`: Arquivos de configuração da imagem Docker e dependências do ambiente Python.
+> `include/data/` é ignorado no versionamento — gerado localmente pelo container com os arquivos Parquet e o banco DuckDB.
 
-## Como executar o projeto localmente
+---
 
-Para rodar este pipeline na sua máquina, você precisará ter o Docker Desktop e o Astro CLI instalados.
+## Como Executar
 
-1.  Clone este repositório para a sua máquina local.
-2.  Abra o terminal na pasta raiz do projeto.
-3.  Inicie a infraestrutura do Airflow executando o comando:
-    ```bash
-    astro dev start
-    ```
-4.  Após a inicialização (os containers do Postgres, Scheduler e Webserver estarão rodando), acesse a interface do Airflow no seu navegador, geralmente em `http://localhost:8080`.
-5.  O usuário e senha padrão são `admin` / `admin`.
-6.  Na interface, ative a DAG correspondente ao pipeline do e-commerce e clique em "Trigger DAG" para acompanhar a execução das tarefas.
+### Pré-requisitos
 
-## Próximos Passos (Consumo)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- [Astro CLI](https://docs.astronomer.io/astro/cli/install-cli)
 
-Ao finalizar a execução da DAG com sucesso, o banco de dados analítico estará disponível na pasta da camada Gold. Qualquer ferramenta de visualização de dados moderna, como Power BI ou Metabase, pode se conectar diretamente ao arquivo do DuckDB para a criação de painéis e extração de insights de negócio.
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/diasgomess/dw-ecommerce.git
+cd dw-ecommerce
+```
+
+### 2. Inicie a infraestrutura
+
+```bash
+astro dev start
+```
+
+O Astro CLI sobe automaticamente os containers do Postgres, Scheduler e Webserver do Airflow.
+
+### 3. Acesse o Airflow
+
+Abra [http://localhost:8080](http://localhost:8080) no navegador.
+
+- **Usuário:** admin
+- **Senha:** admin
+
+### 4. Execute o pipeline
+
+Ative a DAG `pipeline_ecommerce` e clique em **Trigger DAG**. Acompanhe o progresso na interface gráfica.
+
+---
+
+## Consumo dos Dados
+
+Ao finalizar a execução da DAG com sucesso, o arquivo DuckDB estará disponível na pasta da camada Gold. Qualquer ferramenta de BI moderna pode se conectar diretamente:
+
+- **Power BI** — via conector DuckDB ou exportação para CSV/Parquet
+- **Metabase** — conexão direta com o arquivo `.duckdb`
+- **Python/Jupyter** — `import duckdb; con = duckdb.connect('gold/ecommerce.duckdb')`
+
+---
+
+## Próximas Melhorias
+
+| # | Melhoria |
+|---|---|
+| 1 | Substituir Fake Store API por dados sintéticos com Faker em português |
+| 2 | Adicionar camada de qualidade de dados com Great Expectations |
+| 3 | Conectar camada Gold ao Power BI com dashboard publicado |
+| 4 | Migrar para GCP (GCS + BigQuery + Cloud Composer) |
+| 5 | Implementar extração incremental com controle de watermark |
+
+---
+
+## 👤 Autor
+
+**Matheus Gomes** — Trainee de Engenharia de Dados na [Rox Partner](https://www.roxpartner.com.br/)
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/matheusdgomes/)
+[![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/diasgomess)
